@@ -1,6 +1,6 @@
 module Main where
 
-import Lib
+import Data.Rbc
 
 main :: IO ()
 main = someFunc
