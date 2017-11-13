@@ -8,6 +8,7 @@ import Data.Graph.Inductive.PatriciaTree (Gr)
 import Data.List (elemIndex)
 import Data.Maybe (fromJust)
 import Data.Bits (shiftL, shiftR)
+import Data.Hashable
 
 data RbcNode =
   RbcTrue
@@ -15,8 +16,22 @@ data RbcNode =
   | RbcAnd RbcEdge RbcEdge
   deriving (Show)
 
+instance Eq RbcNode where
+  (==) RbcTrue RbcTrue = True
+  (==) RbcTrue _ = False
+  (==) a RbcTrue = RbcTrue == a
+  (==) _ _ = False
+
+instance Hashable RbcNode where
+  hashWithSalt salt RbcTrue = salt + 1
+  hashWithSalt salt (RbcVar s) = 1 + hashWithSalt salt s
+  hashWithSalt salt (RbcAnd a b) = 1 + hashWithSalt salt a + hashWithSalt salt b
+
 data RbcEdge = RbcEdge Bool RbcNode
-  deriving (Show)
+  deriving (Show, Eq)
+
+instance Hashable RbcEdge where
+  hashWithSalt salt (RbcEdge f n) = hashWithSalt salt f + hashWithSalt salt n
 
 
 class BoolFunc a where
@@ -40,20 +55,29 @@ instance BoolFunc [Bool] where
   conjunction a b =  [x && y | x <-a | y<-b ]
 
 var a = RbcEdge False $ RbcVar a
-and a b = RbcEdge False $ RbcAnd a b
+
+and (RbcEdge True RbcTrue) b = b
+and a@(RbcEdge False RbcTrue) b = a
+and a b@(RbcEdge _ RbcTrue) = and b a
+and a@(RbcEdge f1 n1) b@(RbcEdge f2 n2) = if n1 == n2 then
+                                            if f1 == f2 then a else RbcEdge True RbcTrue
+                                          else RbcEdge False $ RbcAnd a b
 not (RbcEdge flip node) = RbcEdge (B.not flip) node
 or a b = not $ and (not a) (not b)
 
 
-eval :: BoolFunc b => (String-> b) -> RbcEdge -> b
-eval assgm (RbcEdge flip RbcTrue) = if flip then negation truth else truth 
-eval assgm (RbcEdge flip (RbcVar s)) = assgm s
-eval assgm (RbcEdge flip (RbcAnd a b)) = if flip then negation result else result
-  where
-    result = conjunction (eval assgm a) (eval assgm b)
 
-tabletruth :: [String] -> RbcEdge ->  [Bool]
-tabletruth inputs formula = eval ttAssgm formula
+eval :: BoolFunc b => (String-> b) -> RbcEdge -> b
+eval assgm (RbcEdge flip n) = if flip then negation val else val
+  where
+    val = evalNode assgm n
+
+evalNode assgm RbcTrue = truth
+evalNode assgm (RbcVar s) = assgm s
+evalNode assgm (RbcAnd a b) = conjunction (eval assgm a) (eval assgm b)
+
+truthTable :: [String] -> RbcEdge ->  [Bool]
+truthTable inputs formula = eval ttAssgm formula
   where
     tabsize = 1 `shiftL` (length inputs)
     ttAssgm a = allAssgms (length inputs)!! fromJust (elemIndex a inputs)
