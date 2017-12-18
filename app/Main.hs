@@ -1,6 +1,6 @@
 module Main where
 
-import Data.Rbc
+import Data.Circuits.Aig
 
 main :: IO ()
 main = someFunc

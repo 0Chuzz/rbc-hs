@@ -1,18 +1,21 @@
+{-#LANGUAGE FlexibleInstances #-}
 import Test.Hspec
-import Data.Rbc as R
+import Data.Circuits.Aig as R
 import Test.QuickCheck
+import Test.QuickCheck.Function
 import Control.Monad
 
-randomFlip :: Gen RbcNode -> Gen RbcEdge
-randomFlip n = do
-  (liftM2 RbcEdge)  (arbitrary :: Gen Bool) n
+randomFlip :: Gen AigNode -> Gen AigEdge
+randomFlip = liftM2 AigEdge  (arbitrary :: Gen Bool)
 
 
-sizedArbRBC 0 = oneof (map randomFlip [return RbcTrue, return (RbcVar "a"), return (RbcVar "b"), return (RbcVar "c"), return (RbcVar "x"), return (RbcVar "y")])
+arbVar = elements ["a", "b", "c", "x", "y"]
 
-sizedArbRBC n = randomFlip $ (liftM2 RbcAnd) (sizedArbRBC (n-1)) (sizedArbRBC (n-1))
+sizedArbRBC 0 = oneof (map randomFlip [return AigTrue, fmap AigVar arbVar ])
 
-instance Arbitrary RbcEdge where
+sizedArbRBC n = randomFlip $ liftM2 AigAnd (sizedArbRBC (n-1)) (sizedArbRBC (n-1))
+
+instance Arbitrary AigEdge where
   arbitrary = sized sizedArbRBC
 
 
@@ -23,10 +26,11 @@ exAssgm "x" = False
 exAssgm "y" = True
 exAssgm other = error ("not defined: " ++ other)
 
+
 main :: IO ()
 main = hspec $ do
   describe "Base lib" $ do
     it "should do something" $ do
       R.eval exAssgm (R.or (R.var "a") (R.var "b")) `shouldBe` True
-
-    it "is quick checked" $ property $ \x -> R.eval exAssgm x /= R.eval exAssgm (R.not x)
+  describe "Quickcheck" $ do
+    it "is quick checked" $ property $ \(x,y) -> let assgm = (apply (y :: Fun String Bool)) in R.eval assgm x /= R.eval assgm (R.not x)
